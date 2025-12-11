@@ -138,8 +138,6 @@ dmypy.json
 *.nbi
 
 # Output files
-*.png
-*.pdf
 *.fits
 *.dat
 *.txt

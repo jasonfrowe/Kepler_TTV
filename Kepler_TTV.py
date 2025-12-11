@@ -5,7 +5,7 @@ import pytfit5.transitmodel as transitm
 import pytfit5.keplerian as kep
 import pytfit5.transitfit as transitf
 from tqdm.auto import trange as _tqdm_trange  # may warn if widgets missing
-from pytfit5.transitPy5 import pad_list_of_arrays
+from pytfit5.transitPy5 import pad_list_of_arrays 
 
 # Robust local alias that falls back gracefully if tqdm is unavailable
 try:
@@ -256,7 +256,7 @@ def plot_full_model_overlay(phot, tmodel, full_model):
     plt.grid(True, alpha=0.3)
     plt.show()
 
-def plot_ttv_comparison(ntt, tobs, omc, omc_err, ntt_new, tobs_new, omc_new, omc_err_new, koi_df, KOI):
+def plot_ttv_comparison(ntt, tobs, omc, omc_err, ntt_new, tobs_new, omc_new, omc_err_new, koi_df, KOI, savefig=False, output_dir='TTVs'):
     """Plot comparison of old vs new TTV measurements.
 
     Parameters
@@ -281,7 +281,13 @@ def plot_ttv_comparison(ntt, tobs, omc, omc_err, ntt_new, tobs_new, omc_new, omc
         KOI data frame with planet information.
     KOI : int
         KOI number for the system.
+    savefig : bool, optional
+        If True, save the figure as a PDF file (default: False).
+    output_dir : str, optional
+        Directory to save the PDF file (default: 'TTVs').
     """
+    import os
+    
     num_planets = len(ntt)
 
     # Create a figure and a set of subplots.
@@ -351,7 +357,88 @@ def plot_ttv_comparison(ntt, tobs, omc, omc_err, ntt_new, tobs_new, omc_new, omc
 
     fig.subplots_adjust(hspace=0)
 
+    # Save figure if requested
+    if savefig:
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        
+        filename = os.path.join(output_dir, f"koi{KOI}_comp.pdf")
+        plt.savefig(filename, bbox_inches='tight', dpi=300)
+        print(f"Figure saved to {filename}")
+
     plt.show()
+
+def save_timing_data(ntt, tobs, omc, omc_err, koi_df, output_dir='TTVs'):
+    """Save transit timing data to .tt files for each planet.
+    
+    This function saves timing data in the format expected by get_timing_data():
+    - Column 1: Calculated transit time (tobs from fit_ttvs)
+    - Column 2: Observed transit time (tobs + omc)
+    - Column 3: Error on observed transit time (omc_err)
+    
+    Files are saved as koi{KOI:07.2f}.tt in the output directory.
+    
+    Parameters
+    ----------
+    ntt : array-like
+        Number of transit times for each planet.
+    tobs : array-like
+        Calculated transit times (2D array: planets x transits).
+    omc : array-like
+        O-C values (2D array: planets x transits).
+    omc_err : array-like
+        O-C errors (2D array: planets x transits).
+    koi_df : DataFrame
+        KOI data frame with planet information including 'KOI' column.
+    output_dir : str, optional
+        Directory to save the .tt files (default: 'TTVs').
+        
+    Returns
+    -------
+    saved_files : list
+        List of filenames that were saved.
+    """
+    import os
+    
+    # Create output directory if it doesn't exist
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    saved_files = []
+    num_planets = len(ntt)
+    
+    for i in range(num_planets):
+        # Get KOI number for this planet
+        koi_value = koi_df["KOI"].values[i]
+        koi_full_str = f"{koi_value:07.2f}"
+        
+        # Create filename
+        filename = os.path.join(output_dir, f"koi{koi_full_str}.tt")
+        
+        # Get the valid data for this planet (ntt[i] points)
+        n_transits = ntt[i]
+        
+        if n_transits > 0:
+            # Extract data for this planet
+            calc_times = tobs[i, :n_transits]
+            omc_values = omc[i, :n_transits]
+            omc_errors = omc_err[i, :n_transits]
+            
+            # Calculate observed times: observed = calculated + omc
+            obs_times = calc_times + omc_values
+            
+            # Write to file
+            with open(filename, 'w') as f:
+                for j in range(n_transits):
+                    # Format: calc_time obs_time error
+                    f.write(f"{calc_times[j]:.10f} {obs_times[j]:.10f} {omc_errors[j]:.10f}\n")
+            
+            print(f"Saved {n_transits} timing points to {filename}")
+            saved_files.append(filename)
+        else:
+            print(f"No timing points for KOI {koi_full_str}, skipping file creation.")
+    
+    return saved_files
 
 def fourier_decompose(time, flux, max_frequency=None, n_terms=10):
     """Perform Fourier decomposition of TTV data using Lomb-Scargle periodogram.
